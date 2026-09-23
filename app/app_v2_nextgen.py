@@ -644,6 +644,115 @@ with tab_predictions:
     })
     
     st.dataframe(maintenance_forecast, use_container_width=True, hide_index=True)
+    st.divider()
+    st.markdown("<div class='v2-section-header'>🗓️ Maintenance Planner</div>", unsafe_allow_html=True)
+
+    plan_col1, plan_col2 = st.columns([1, 3])
+
+    with plan_col1:
+        n_units = st.number_input(
+            "Units to schedule",
+            min_value=1,
+            max_value=15,
+            value=5
+        )
+
+        plan_horizon = st.number_input(
+            "Within next (days)",
+            min_value=1,
+            max_value=30,
+            value=7
+        )
+
+    plan_result = tools.plan_maintenance(
+        n_units=n_units,
+        horizon_days=plan_horizon
+    )
+
+    plan_df = pd.DataFrame(plan_result["data"])
+
+    with plan_col2:
+        if plan_df.empty:
+            st.info("No equipment currently qualifies for the planner.")
+        else:
+            st.dataframe(
+                plan_df[
+                    [
+                        "scheduled_day",
+                        "equipment_id",
+                        "equipment_type",
+                        "project",
+                        "current_downtime_rate_%",
+                        "projected_downtime_rate_%",
+                        "reason"
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True
+            )
+
+    st.divider()
+    st.markdown(
+        "<div class='v2-section-header'>🔀 What-If: Delay Maintenance Simulator</div>",
+        unsafe_allow_html=True
+    )
+
+    sim_col1, sim_col2 = st.columns([1, 3])
+
+    with sim_col1:
+        all_equipment = sorted(
+            plan_df["equipment_id"].unique().tolist()
+        ) if not plan_df.empty else []
+
+        if all_equipment:
+            sim_equipment = st.selectbox(
+                "Equipment",
+                all_equipment
+            )
+
+            sim_delay = st.slider(
+                "Delay maintenance by (days)",
+                min_value=1,
+                max_value=30,
+                value=9
+            )
+
+    with sim_col2:
+        if all_equipment:
+            sim_result = tools.simulate_maintenance_delay(
+                sim_equipment,
+                sim_delay
+            )
+
+            if "error" in sim_result:
+                st.warning(sim_result["error"])
+            else:
+                a = sim_result["scenario_maintain_now"]
+                b = sim_result["scenario_delay"]
+
+                m1, m2, m3 = st.columns(3)
+
+                m1.metric(
+                    "Downtime hours — maintain now",
+                    f"{a['total_downtime_hours']}"
+                )
+
+                m2.metric(
+                    "Downtime hours — if delayed",
+                    f"{b['total_downtime_hours']}",
+                    delta=f"+{sim_result['extra_downtime_hours_if_delayed']} hrs"
+                )
+
+                m3.metric(
+                    "Utilization if delayed",
+                    f"{b['utilization_%']}%",
+                    delta=f"{round(b['utilization_%'] - a['utilization_%'], 1)}%"
+                )
+
+                if "maintaining now" in sim_result["recommendation"]:
+                    st.error(f"⚠️ {sim_result['recommendation']}")
+                else:
+                    st.success(f"✅ {sim_result['recommendation']}")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # TAB 4: TEAM COLLABORATION
