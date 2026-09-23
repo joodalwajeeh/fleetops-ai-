@@ -42,6 +42,20 @@ TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "get_top_utilization_equipment",
+            "description": "يرجع المعدات مرتبة حسب معدل الاستخدام (Utilization %)، الأعلى أو الأقل استخدامًا",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "top_n": {"type": "integer", "description": "عدد المعدات المطلوبة", "default": 5},
+                    "ascending": {"type": "boolean", "description": "true لعرض الأقل استخدامًا بدل الأعلى", "default": False}
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_equipment_needing_attention",
             "description": "يحدد المعدات التي تحتاج تدخل صيانة/تشغيل فوري بناءً على Downtime وكفاءة الوقود وتكرار الصيانة",
             "parameters": {
@@ -98,6 +112,7 @@ TOOLS_SCHEMA = [
 
 TOOL_FUNCTIONS = {
     "get_top_downtime_equipment": tools.get_top_downtime_equipment,
+    "get_top_utilization_equipment": tools.get_top_utilization_equipment,
     "get_equipment_needing_attention": tools.get_equipment_needing_attention,
     "explain_utilization_trend": tools.explain_utilization_trend,
     "analyze_fuel_consumption": tools.analyze_fuel_consumption,
@@ -160,6 +175,12 @@ def _route_question(question: str) -> tuple[str, dict]:
         return "get_equipment_needing_attention", {}
     if any(k in q for k in ["وقود", "fuel", "استهلاك"]):
         return "analyze_fuel_consumption", {}
+    # فحص دقيق لأعلى/أقل معدة باستخدام - لازم يجي قبل الفحص العام لكلمة "استخدام"/"utilization"
+    if any(k in q for k in ["highest utilization", "أعلى استخدام", "أعلى معدة", "top utilization",
+                             "most utilized", "أكثر استخدام"]):
+        return "get_top_utilization_equipment", {"top_n": 5, "ascending": False}
+    if any(k in q for k in ["lowest utilization", "أقل استخدام", "least utilized", "أقل معدة"]):
+        return "get_top_utilization_equipment", {"top_n": 5, "ascending": True}
     if any(k in q for k in ["انخفض", "استخدام", "utilization", "قلّ", "قل معدل"]):
         return "explain_utilization_trend", {}
     if any(k in q for k in ["تقرير", "report", "أداء الأسطول"]):
@@ -179,6 +200,13 @@ def _summarize(tool_name: str, result: dict) -> str:
         for r in result["data"]:
             lines.append(f"  • {r['equipment_id']} ({r['equipment_type']}, {r['project']}) — "
                          f"downtime {r['downtime_rate_%']}% | maintenance {r['maintenance_events']}x")
+        return "\n".join(lines)
+
+    if tool_name == "get_top_utilization_equipment":
+        lines = [f"📊 Equipment ranked by utilization ({result['order']}):"]
+        for r in result["data"]:
+            lines.append(f"  • {r['equipment_id']} ({r['equipment_type']}, {r['project']}) — "
+                         f"utilization {r['utilization_%']}%")
         return "\n".join(lines)
 
     if tool_name == "get_equipment_needing_attention":
@@ -248,6 +276,7 @@ def ask_agent(user_question: str) -> str:
 if __name__ == "__main__":
     questions = [
         "ما المعدات التي لديها أعلى Downtime؟",
+        "Which equipment has the highest utilization rate?",
         "أي المعدات تحتاج إلى تدخل فوري؟",
         "لماذا انخفض معدل استخدام المعدات؟",
         "ما أسباب ارتفاع استهلاك الوقود؟",
