@@ -1,0 +1,130 @@
+[
+  {
+    "id": "TC-01",
+    "name": "Data integrity (row count, no nulls, 30 units)",
+    "expected": "2700 rows, 30 units, 0 null values",
+    "actual": "2700 rows, 30 units, 0 nulls",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-02",
+    "name": "KPI calculation accuracy (manual vs tool, EQ-001)",
+    "expected": "Utilization match within 0.5% (manual=96.7%)",
+    "actual": "Tool output=96.7%",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-03",
+    "name": "Fair fuel comparison (within-type, not fleet-wide)",
+    "expected": "Not all Dump Trucks flagged just for being naturally fuel-heavy",
+    "actual": "0/8 Dump Trucks flagged for fuel",
+    "passed": true,
+    "notes": "Bug found & fixed during development: initial version compared fleet-wide average, causing false positives on naturally fuel-heavy equipment types."
+  },
+  {
+    "id": "TC-04",
+    "name": "Fuel anomaly detection (ground truth: EQ-008 was injected with a fuel spike)",
+    "expected": "EQ-008 appears in anomalies list",
+    "actual": "Detected units: ['EQ-008']",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-05",
+    "name": "ML anomaly detection cross-validates manual downtime ranking",
+    "expected": "At least 2 of top-3 manual downtime units also flagged by Isolation Forest",
+    "actual": "Overlap: {'EQ-013', 'EQ-026', 'EQ-024'} (3/3)",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-06",
+    "name": "Agent routing: \"Which equipment has the highest downtime?\"",
+    "expected": "Routes to get_top_downtime_equipment",
+    "actual": "Routed to get_top_downtime_equipment",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-06",
+    "name": "Agent routing: \"Which equipment needs urgent attention?\"",
+    "expected": "Routes to get_equipment_needing_attention",
+    "actual": "Routed to get_equipment_needing_attention",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-06",
+    "name": "Agent routing: \"Why did utilization drop?\"",
+    "expected": "Routes to explain_utilization_trend",
+    "actual": "Routed to explain_utilization_trend",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-06",
+    "name": "Agent routing: \"What's causing the fuel increase?\"",
+    "expected": "Routes to analyze_fuel_consumption",
+    "actual": "Routed to analyze_fuel_consumption",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-06",
+    "name": "Agent routing: \"Generate a fleet performance report\"",
+    "expected": "Routes to generate_fleet_report",
+    "actual": "Routed to generate_fleet_report",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-07",
+    "name": "Edge case handling: (empty input)",
+    "expected": "No crash, returns a safe fallback answer",
+    "actual": "Returned valid response, no exception",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-07",
+    "name": "Edge case handling: (vague question, Arabic)",
+    "expected": "No crash, returns a safe fallback answer",
+    "actual": "Returned valid response, no exception",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-07",
+    "name": "Edge case handling: (random gibberish)",
+    "expected": "No crash, returns a safe fallback answer",
+    "actual": "Returned valid response, no exception",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-07",
+    "name": "Edge case handling: (numeric-only input)",
+    "expected": "No crash, returns a safe fallback answer",
+    "actual": "Returned valid response, no exception",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-08a",
+    "name": "Project report PDF generated successfully",
+    "expected": "File exists, size > 1KB",
+    "actual": "Exists=True",
+    "passed": true,
+    "notes": ""
+  },
+  {
+    "id": "TC-08b",
+    "name": "Presentation PPTX generated successfully",
+    "expected": "File exists, size > 1KB",
+    "actual": "Exists=True",
+    "passed": true,
+    "notes": ""
+  }
+]

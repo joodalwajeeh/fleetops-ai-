@@ -1,0 +1,39 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# FleetOps AI — COMPLETE REQUIREMENTS
+# For both Version 1 (Premium) and Version 2 (Next-Gen)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Core Data Science
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Web Framework
+streamlit>=1.28.0
+plotly>=5.17.0
+
+# AI/LLM
+openai>=1.0.0
+python-dotenv>=1.0.0
+
+# Utilities
+requests>=2.31.0
+python-dateutil>=2.8.0
+
+# Optional: FastAPI (for Version 2 API endpoints)
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.0.0
+
+# Optional: Reporting
+reportlab>=4.0.0
+openpyxl>=3.1.0
+
+# Optional: Data Processing
+scipy>=1.11.0
+pyarrow>=13.0.0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Installation:
+# pip install -r requirements.txt
+# ═══════════════════════════════════════════════════════════════════════════════
