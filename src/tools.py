@@ -366,5 +366,27 @@ def calculate_roi_potential(hourly_equipment_value: float = 150.0, horizon_days:
         "formula": "Σ (unit's avg daily hours × horizon_days × (projected_rate − fleet_avg_rate)) × hourly_equipment_value",
         "narrative_hint": "This is a transparent estimate, not a guarantee — it depends on the hourly_equipment_value assumption, which the user should adjust to match their real fleet economics.",
     }
+
+# ---------------------------------------------------------------------------
+# Tool 8: أعلى/أقل المعدات من حيث معدل الاستخدام (Utilization)
+# ---------------------------------------------------------------------------
+def get_top_utilization_equipment(top_n: int = 5, ascending: bool = False) -> dict:
+    """يرجع المعدات مرتبة حسب معدل الاستخدام (Utilization %). ascending=True لعرض الأقل استخدامًا."""
+    df = _load_data()
+    agg = df.groupby(["equipment_id", "equipment_type", "project"]).agg(
+        operating_hours=("operating_hours", "sum"),
+        downtime_hours=("downtime_hours", "sum"),
+    ).reset_index()
+    agg["utilization_%"] = (
+        agg["operating_hours"] / (agg["operating_hours"] + agg["downtime_hours"]) * 100
+    ).round(1)
+    ranked = agg.sort_values("utilization_%", ascending=ascending).head(top_n)
+
+    return {
+        "tool": "get_top_utilization_equipment",
+        "order": "lowest first" if ascending else "highest first",
+        "data": ranked[["equipment_id", "equipment_type", "project", "utilization_%"]].to_dict(orient="records"),
+        "narrative_hint": "Equipment ranked by utilization rate (operating hours / total scheduled hours).",
+    }
  
 
