@@ -250,3 +250,121 @@ def generate_fleet_report() -> dict:
 if __name__ == "__main__":
     import json
     print(json.dumps(get_top_downtime_equipment(3), ensure_ascii=False, indent=2, default=str))
+
+
+Tools addition · PY
+ 
+# ---------------------------------------------------------------------------
+# Tool 6: تنبؤ حقيقي بالمخاطر المستقبلية (اتجاه فعلي مبني على البيانات)
+# ---------------------------------------------------------------------------
+def forecast_equipment_risk(horizon_days: int = 30, downtime_alert_threshold: float = 20.0) -> dict:
+    """
+    تنبؤ حقيقي (مش أرقام ثابتة): يحسب اتجاه معدل التوقف أسبوعيًا لكل معدة
+    خلال آخر 8 أسابيع، ويمد الاتجاه (linear trend) للأمام Xهورايزون يوم.
+    r2_fit_quality يعكس مدى انتظام الاتجاه (كلما قرب من 1 كان الاتجاه أوضح وأقل ضجيج).
+    """
+    df = _load_data()
+    max_date = df["date"].max()
+    results = []
+ 
+    for eq_id, g in df.groupby("equipment_id"):
+        g = g.set_index("date").sort_index()
+        weekly = g.resample("W").agg(
+            operating_hours=("operating_hours", "sum"),
+            downtime_hours=("downtime_hours", "sum"),
+        ).reset_index()
+        weekly["rate_%"] = (
+            weekly["downtime_hours"] / (weekly["operating_hours"] + weekly["downtime_hours"]).replace(0, np.nan) * 100
+        ).fillna(0)
+        weekly = weekly.tail(8)
+        if len(weekly) < 4:
+            continue
+ 
+        x = np.arange(len(weekly))
+        y = weekly["rate_%"].values
+        slope, intercept = np.polyfit(x, y, 1)
+        y_pred = slope * x + intercept
+        ss_res = np.sum((y - y_pred) ** 2)
+        ss_tot = np.sum((y - y.mean()) ** 2)
+        r2 = round(max(0.0, 1 - ss_res / ss_tot) if ss_tot > 0 else 0.0, 2)
+ 
+        future_x = x.max() + (horizon_days / 7)
+        projected = float(np.clip(slope * future_x + intercept, 0, 100))
+ 
+        # تقدير موعد الصيانة القادمة من متوسط الفاصل بين أحداث الصيانة السابقة
+        maint_dates = g.loc[g["maintenance_flag"] == 1].index.sort_values()
+        days_until_maintenance = None
+        if len(maint_dates) >= 2:
+            avg_interval = maint_dates.to_series().diff().dt.days.dropna().mean()
+            days_since_last = (max_date - maint_dates.max()).days
+            days_until_maintenance = max(0, round(avg_interval - days_since_last))
+ 
+        results.append({
+            "equipment_id": eq_id,
+            "equipment_type": g["equipment_type"].iloc[0] if "equipment_type" in g.columns else None,
+            "project": g["project"].iloc[0] if "project" in g.columns else None,
+            "current_downtime_rate_%": round(y[-1], 1),
+            "trend_%_per_week": round(slope, 2),
+            "projected_downtime_rate_%": round(projected, 1),
+            "r2_fit_quality": r2,
+            "days_until_next_maintenance_est": days_until_maintenance,
+            "risk_flag": bool(projected >= downtime_alert_threshold or (days_until_maintenance is not None and days_until_maintenance <= 14)),
+        })
+ 
+    results = sorted(results, key=lambda r: r["projected_downtime_rate_%"], reverse=True)
+    return {
+        "tool": "forecast_equipment_risk",
+        "horizon_days": horizon_days,
+        "data": results,
+        "narrative_hint": (
+            "projected_downtime_rate_% extrapolates each unit's own weekly trend forward. "
+            "r2_fit_quality shows how reliable that trend is (low = noisy history, treat the number as a rough signal, not a guarantee). "
+            "risk_flag units deserve inspection priority."
+        ),
+    }
+ 
+ 
+# ---------------------------------------------------------------------------
+# Tool 7: حاسبة ROI شفافة (صيغة واضحة، مو رقم جاهز)
+# ---------------------------------------------------------------------------
+def calculate_roi_potential(hourly_equipment_value: float = 150.0, horizon_days: int = 30) -> dict:
+    """
+    يحسب التوفير المتوقع لو المعدات المعرضة للخطر رجعت لمعدل توقف الأسطول العادي.
+    hourly_equipment_value: القيمة التشغيلية التقديرية لساعة تشغيل واحدة (ريال/دولار)،
+    هذا رقم قابل للتعديل من المستخدم، مو مفروض كحقيقة ثابتة.
+    """
+    df = _load_data()
+    fleet_avg_rate = (
+        df["downtime_hours"].sum() / (df["operating_hours"].sum() + df["downtime_hours"].sum()) * 100
+    )
+ 
+    risk = forecast_equipment_risk(horizon_days=horizon_days)["data"]
+    flagged = [r for r in risk if r["risk_flag"]]
+ 
+    breakdown = []
+    total_hours_saved = 0.0
+    for r in flagged:
+        eq_daily_hours = df[df["equipment_id"] == r["equipment_id"]]["operating_hours"].tail(30).mean()
+        rate_gap = max(0.0, r["projected_downtime_rate_%"] - fleet_avg_rate) / 100
+        hours_at_risk = eq_daily_hours * horizon_days * rate_gap
+        total_hours_saved += hours_at_risk
+        breakdown.append({
+            "equipment_id": r["equipment_id"],
+            "extra_downtime_hours_if_untreated": round(hours_at_risk, 1),
+        })
+ 
+    estimated_savings = round(total_hours_saved * hourly_equipment_value, 0)
+ 
+    return {
+        "tool": "calculate_roi_potential",
+        "assumption_hourly_equipment_value": hourly_equipment_value,
+        "fleet_avg_downtime_rate_%": round(fleet_avg_rate, 1),
+        "flagged_units_count": len(flagged),
+        "total_at_risk_hours_next_%d_days" % horizon_days: round(total_hours_saved, 1),
+        "estimated_savings_if_addressed": estimated_savings,
+        "breakdown": breakdown,
+        "formula": "Σ (unit's avg daily hours × horizon_days × (projected_rate − fleet_avg_rate)) × hourly_equipment_value",
+        "narrative_hint": "This is a transparent estimate, not a guarantee — it depends on the hourly_equipment_value assumption, which the user should adjust to match their real fleet economics.",
+    }
+ 
+
