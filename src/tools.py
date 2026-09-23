@@ -380,3 +380,133 @@ def get_top_utilization_equipment(top_n: int = 5, ascending: bool = False) -> di
 if __name__ == "__main__":
     import json
     print(json.dumps(get_top_downtime_equipment(3), ensure_ascii=False, indent=2, default=str))
+
+
+# ---------------------------------------------------------------------------
+# Tool 9: مخطط الصيانة (Maintenance Planner)
+# ---------------------------------------------------------------------------
+def plan_maintenance(n_units: int = 5, horizon_days: int = 7) -> dict:
+    """
+    يختار أهم n_units معدة تحتاج صيانة خلال horizon_days يوم القادمة، ويرتبها
+    حسب الأولوية (معدات متأخرة عن موعد صيانتها أولاً، ثم الأعلى في اتجاه التوقف المتوقع)،
+    ويوزعها على أيام الخطة (يوم 1 إلى horizon_days) بحيث الأعجل يجدول أول.
+    """
+    risk = forecast_equipment_risk(horizon_days=horizon_days)["data"]
+
+    def urgency_key(r):
+        due = r["days_until_next_maintenance_est"]
+        due_score = due if due is not None else 999
+        return (-int(r["risk_flag"]), due_score, -r["projected_downtime_rate_%"])
+
+    ranked = sorted(risk, key=urgency_key)
+    selected = ranked[: min(n_units, len(ranked))]
+
+    plan = []
+    n = len(selected)
+    for i, r in enumerate(selected):
+        scheduled_day = max(1, round((i + 1) * horizon_days / max(1, n)))
+        due = r["days_until_next_maintenance_est"]
+        if due is not None and due <= horizon_days:
+            reason = f"Maintenance due in ~{due} day(s)"
+        elif r["risk_flag"]:
+            reason = f"Downtime trending up, projected {r['projected_downtime_rate_%']}%"
+        else:
+            reason = "Included to fill planner capacity (lower urgency)"
+        plan.append({
+            "equipment_id": r["equipment_id"],
+            "equipment_type": r["equipment_type"],
+            "project": r["project"],
+            "scheduled_day": scheduled_day,
+            "current_downtime_rate_%": r["current_downtime_rate_%"],
+            "projected_downtime_rate_%": r["projected_downtime_rate_%"],
+            "reason": reason,
+        })
+
+    return {
+        "tool": "plan_maintenance",
+        "horizon_days": horizon_days,
+        "n_units_requested": n_units,
+        "n_units_scheduled": len(plan),
+        "data": plan,
+        "narrative_hint": (
+            "Maintenance plan for the next horizon_days, ranked by urgency (overdue units first, "
+            "then units with the steepest rising downtime trend). scheduled_day spreads them across the window."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tool 10: محاكي "ماذا لو" لتأجيل الصيانة (What-If Simulator)
+# ---------------------------------------------------------------------------
+def simulate_maintenance_delay(equipment_id: str, delay_days: int, evaluation_window_days: int = 30) -> dict:
+    """
+    يقارن سيناريوهين لمعدة معينة على مدى evaluation_window_days:
+      (أ) صيانتها الآن  -> نفترض رجوع معدل توقفها لمتوسط الأسطول العادي فورًا.
+      (ب) تأجيل الصيانة delay_days يوم -> تكمل اتجاهها الحالي (trend فعلي من بياناتها) خلال فترة
+          التأجيل، ثم ترجع لمتوسط الأسطول بعد ما تنصان.
+    الفرق بين السيناريوهين يعطي تقدير لساعات التوقف الإضافية والأثر على الاستخدام لو أجّلنا.
+    """
+    df = _load_data()
+    eq_df = df[df["equipment_id"] == equipment_id]
+    if eq_df.empty:
+        return {"tool": "simulate_maintenance_delay", "error": f"No equipment found named {equipment_id}"}
+
+    fleet_avg_rate = (
+        df["downtime_hours"].sum() / (df["operating_hours"].sum() + df["downtime_hours"].sum()) * 100
+    )
+
+    risk_data = forecast_equipment_risk(horizon_days=evaluation_window_days)["data"]
+    eq_risk = next((r for r in risk_data if r["equipment_id"] == equipment_id), None)
+    if eq_risk is None:
+        return {"tool": "simulate_maintenance_delay", "error": f"Not enough recent history to simulate for {equipment_id}"}
+
+    avg_daily_hours = eq_df["operating_hours"].tail(30).mean()
+    current_rate = eq_risk["current_downtime_rate_%"]
+    slope_per_day = eq_risk["trend_%_per_week"] / 7
+
+    delay_days = max(0, min(delay_days, evaluation_window_days))
+
+    # Scenario A: maintain now -> rate assumed at fleet average for the whole window
+    scenario_a_rate = fleet_avg_rate
+    scenario_a_hours = avg_daily_hours * evaluation_window_days * (scenario_a_rate / 100)
+
+    # Scenario B: continue current trend during the delay period, then reset to fleet average
+    rate_during_delay = float(np.clip(current_rate + slope_per_day * delay_days / 2, 0, 100))
+    remaining_days = evaluation_window_days - delay_days
+    hours_during_delay = avg_daily_hours * delay_days * (rate_during_delay / 100)
+    hours_after = avg_daily_hours * remaining_days * (fleet_avg_rate / 100)
+    scenario_b_hours = hours_during_delay + hours_after
+    blended_rate_b = (
+        (rate_during_delay * delay_days + fleet_avg_rate * remaining_days) / evaluation_window_days
+        if evaluation_window_days > 0 else rate_during_delay
+    )
+
+    extra_hours = round(scenario_b_hours - scenario_a_hours, 1)
+    recommendation = (
+        "Delaying is acceptable — limited extra downtime expected"
+        if extra_hours < avg_daily_hours
+        else "Recommend maintaining now — delay costs more than a day of extra downtime"
+    )
+
+    return {
+        "tool": "simulate_maintenance_delay",
+        "equipment_id": equipment_id,
+        "delay_days": delay_days,
+        "evaluation_window_days": evaluation_window_days,
+        "scenario_maintain_now": {
+            "avg_downtime_rate_%": round(scenario_a_rate, 1),
+            "total_downtime_hours": round(scenario_a_hours, 1),
+            "utilization_%": round(100 - scenario_a_rate, 1),
+        },
+        "scenario_delay": {
+            "avg_downtime_rate_%": round(blended_rate_b, 1),
+            "total_downtime_hours": round(scenario_b_hours, 1),
+            "utilization_%": round(100 - blended_rate_b, 1),
+        },
+        "extra_downtime_hours_if_delayed": extra_hours,
+        "recommendation": recommendation,
+        "narrative_hint": (
+            "Compares maintaining now vs delaying by delay_days, using this unit's own recent trend. "
+            "This is an estimate that assumes the current trend continues — not a guarantee."
+        ),
+    }
