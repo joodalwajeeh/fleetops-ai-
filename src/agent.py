@@ -108,6 +108,35 @@ TOOLS_SCHEMA = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan_maintenance",
+            "description": "يختار أهم المعدات للصيانة خلال عدد أيام معين ويرتبها حسب الأولوية",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "n_units": {"type": "integer", "default": 5},
+                    "horizon_days": {"type": "integer", "default": 7}
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "simulate_maintenance_delay",
+            "description": "يحاكي أثر تأجيل صيانة معدة معينة عدد أيام معين على التوقف والاستخدام",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "equipment_id": {"type": "string"},
+                    "delay_days": {"type": "integer"}
+                },
+                "required": ["equipment_id", "delay_days"],
+            },
+        },
+    },
 ]
 
 TOOL_FUNCTIONS = {
@@ -118,6 +147,8 @@ TOOL_FUNCTIONS = {
     "analyze_fuel_consumption": tools.analyze_fuel_consumption,
     "generate_fleet_report": tools.generate_fleet_report,
     "compute_attention_scores": ml_anomaly.compute_attention_scores,
+    "plan_maintenance": tools.plan_maintenance,
+    "simulate_maintenance_delay": tools.simulate_maintenance_delay,
 }
 
 SYSTEM_PROMPT = """You are FleetOps AI, an intelligent assistant for construction fleet operations.
